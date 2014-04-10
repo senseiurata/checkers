@@ -97,6 +97,10 @@ class Piece
     @board[@pos] = nil
     @pos = target_pos
     @board.place_piece(self, target_pos)
+
+    maybe_promote
+
+    true
   end
 
   def slide_valid?(target_pos)
@@ -120,6 +124,8 @@ class Piece
     @board[@pos] = nil
     @pos = target_pos
     @board.place_piece(self, target_pos)
+
+    maybe_promote
 
     true
   end
@@ -145,12 +151,21 @@ class Piece
     end
   end
 
+  def maybe_promote
+    promote if on_last_row?
+  end
+
+  def on_last_row?
+    (@color == :black && @pos.first == 0) || 
+    (@color == :red && @pos.first == 7)
+  end
+
   def move_diffs
     moves = [[1, -1], [1, 1]]
 
-    moves << [-1, -1] << [1, -1] if @king
+    moves << [-1, -1] << [-1, 1] if @king
 
-    if color == :black
+    if @color == :black
       moves.map { |move| [-move.first, move.last] } 
     else
       moves
