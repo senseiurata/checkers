@@ -100,33 +100,27 @@ class Piece
   end
 
   def perform_slide(target_pos)
-    return false unless slide_valid?(target_pos)
+    validate_slide(target_pos)
 
     @board[@pos] = nil
     @pos = target_pos
     @board.place_piece(self, target_pos)
 
     maybe_promote
-
-    true
   end
 
-  def slide_valid?(target_pos)
+  def validate_slide(target_pos)
     slide_moves = move_diffs.map { |move_diff| add_pos(@pos, move_diff) }
 
     if !slide_moves.include?(target_pos)
       raise InvalidInputError.new("Cannot slide to target location")
-      false
     elsif !@board[target_pos].nil?
       raise InvalidInputError.new("Piece already exists on target position")
-      false
-    else
-      true
     end
   end
 
   def perform_jump(target_pos)
-    return false unless jump_valid?(target_pos)
+    validate_jump(target_pos)
 
     @board[avg_pos(@pos, target_pos)] = nil
     @board[@pos] = nil
@@ -134,29 +128,26 @@ class Piece
     @board.place_piece(self, target_pos)
 
     maybe_promote
-
-    true
   end
 
-  def jump_valid?(target_pos)
+  def validate_jump(target_pos)
     jump_moves = move_diffs.map do |move_diff|
       add_pos(@pos, move_diff, move_diff)
     end
 
     if !jump_moves.include?(target_pos)
       raise InvalidInputError.new("Cannot jump to target location")
-      false
     elsif !@board[target_pos].nil?
       raise InvalidInputError.new("Piece already exists on target position")
     elsif @board[avg_pos(@pos, target_pos)].nil?
       raise InvalidInputError.new("No piece to jump over")
-      false
     elsif @board[avg_pos(@pos, target_pos)].color == @color
       raise InvalidInputError.new("Cannot jump over own piece")
-      false
-    else
-      true
     end
+  end
+
+  def perform_moves!(move_sequence)
+
   end
 
   def maybe_promote
@@ -238,6 +229,10 @@ class Game
 end
 
 class InvalidInputError < StandardError
+
+end
+
+class InvalidMoveError < StandardError
 
 end
 
