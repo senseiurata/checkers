@@ -17,17 +17,18 @@ class Board
     red_init_pos.each do |pos|
       self[pos] = Piece.new(self, pos, :red)
     end
+ 
     black_init_pos.each do |pos|
       self[pos] = Piece.new(self, pos, :black)
     end
   end
 
-  def []= (pos, piece)
+  def []=(pos, piece)
     row, col = pos
     @grid[row][col] = piece
   end
 
-  def [] (pos)
+  def [](pos)
     row, col = pos
     @grid[row][col]
   end
@@ -41,28 +42,35 @@ class Board
   end
 
 
-  def render
-    puts "  #{(0..7).to_a.join(" ")}"
+  def to_s
+    str = ""
+    
+    str << "  #{(0..7).to_a.join(" ")}\n"
+
     8.times do |row|
-      print "#{row}"
+      str << "#{row}"
+
       8.times do |col|
         if @grid[row][col].nil?
           bgcolor = ((row + col).odd? ? :light_black : :light_white)
-          print "  ".colorize({ :background => bgcolor })
+          
+          str << "  ".colorize({ :background => bgcolor })
         else
-          print "#{@grid[row][col].to_s} ".colorize({
+          str << "#{@grid[row][col].to_s} ".colorize({
             :background => :light_black
           })
         end
       end
-      puts
+
+      str << "\n"
     end
+
+    str
   end
 
   def has_piece?(pos)
-    !self[pos].nil? && self[pos].is_a?(Piece)
+    !self[pos].nil?
   end
-
 end
 
 class Piece
@@ -107,10 +115,10 @@ class Piece
     slide_moves = move_diffs.map { |move_diff| add_pos(@pos, move_diff) }
 
     if !slide_moves.include?(target_pos)
-      puts "Cannot slide there"
+      raise InvalidInputError.new("Cannot slide to target location")
       false
     elsif !@board[target_pos].nil?
-      puts "Piece already exists on target position"
+      raise InvalidInputError.new("Piece already exists on target position")
       false
     else
       true
@@ -136,15 +144,15 @@ class Piece
     end
 
     if !jump_moves.include?(target_pos)
-      puts "Cannot jump there"
+      raise InvalidInputError.new("Cannot jump to target location")
       false
     elsif !@board[target_pos].nil?
-      puts "Piece already exists on target position"
+      raise InvalidInputError.new("Piece already exists on target position")
     elsif @board[avg_pos(@pos, target_pos)].nil?
-      puts "No piece to jump over"
+      raise InvalidInputError.new("No piece to jump over")
       false
     elsif @board[avg_pos(@pos, target_pos)].color == @color
-      puts "Cannot jump over own piece"
+      raise InvalidInputError.new("Cannot jump over own piece")
       false
     else
       true
@@ -191,29 +199,37 @@ class Game
 
     while true
       begin
-      @board.render
-      input = gets.chomp
-      
-      unless input =~ /^.\s[0-7],[0-7]\s[0-7],[0-7]$/
-        raise "Invalid board position and/or format."
-      end
+        puts @board
+        input = gets.chomp
+        
+        unless input =~ /^.\s[0-7],[0-7]\s[0-7],[0-7]$/
+          raise "Invalid board position and/or format."
+        end
 
-      type, start_pos, end_pos = input.split(" ")
-      start_pos = start_pos.split(",").map { |coord| Integer(coord) }
-      end_pos = end_pos.split(",").map { |coord| Integer(coord) }
+        type, start_pos, end_pos = input.split(" ")
+        start_pos = start_pos.split(",").map { |coord| Integer(coord) }
+        end_pos = end_pos.split(",").map { |coord| Integer(coord) }
 
-      raise "No piece in start position" unless @board.has_piece?(start_pos)
-      
-      if type == 's'
-        @board[start_pos].perform_slide(end_pos)
-      elsif type == 'j'    
-        @board[start_pos].perform_jump(end_pos)
-      end
+        unless @board.has_piece?(start_pos)
+          raise InvalidInputError.new("No piece in start position")
+        end
+        
+        if type == 's'
+          @board[start_pos].perform_slide(end_pos)
+        elsif type == 'j'    
+          @board[start_pos].perform_jump(end_pos)
+        end
 
+      rescue InvalidInputError => e
+        puts "Invalid input!"
+        puts e.message
+        puts
+        retry
       rescue => e
+        puts "Unknown error"
         puts e.message
         puts e.backtrace
-        retry
+        puts
       end
 
       puts
@@ -221,20 +237,10 @@ class Game
   end
 end
 
+class InvalidInputError < StandardError
+
+end
+
 game = Game.new
 
 game.run
-# b.place_pieces
-
-# pos = [5,6]
-
-# b[[4,3]] = Piece.new(b, [4,3], :red)
-# b[[4,5]] = Piece.new(b, [4,7], :red)
-
-# b[[5,0]].perform_slide([4, -1])
-# b[[5,0]].perform_slide([4, 1])
-# b[[4,1]].perform_slide([5, 0])
-# b[[2,3]].perform_slide([3, 2])
-# b[[3,2]].perform_slide([4, 3])
-# b[[3,2]].perform_slide([4, 1])
-# b.render
