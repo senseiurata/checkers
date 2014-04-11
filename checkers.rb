@@ -23,6 +23,19 @@ class Board
     end
   end
 
+  def over?
+    pieces.none? { |piece| piece.color == :black } ||
+    pieces.none? { |piece| piece.color == :red }
+  end
+
+  def winner
+    return :red if pieces.none? { |piece| piece.color == :black }
+    return :black if pieces.none? { |piece| piece.color == :red }
+
+    nil
+  end
+
+
   def []=(pos, piece)
     row, col = pos
     @grid[row][col] = piece
@@ -39,6 +52,25 @@ class Board
 
   def valid_pos?(pos)
     pos.all? { |coord| coord.between?(0, 7) }
+  end
+
+  def has_piece?(pos)
+    !self[pos].nil?
+  end
+
+  def pieces
+    @grid.flatten.compact
+  end
+
+  def dup
+    new_board = Board.new
+
+    pieces.each do |piece|
+      new_piece = piece.dup(new_board)
+      new_board.place_piece(new_piece, new_piece.pos)
+    end
+
+    new_board
   end
 
 
@@ -67,26 +99,26 @@ class Board
 
     str
   end
-
-  def has_piece?(pos)
-    !self[pos].nil?
-  end
 end
 
 class Piece
-  attr_reader :king, :color
+  attr_reader :king, :color, :pos
 
-  def initialize(board, pos, color)
+  def initialize(board, pos, color, king = false)
     @board = board
     @pos = pos
     @color = color
-    @king = false
+    @king = king
 
     board.place_piece(self, pos)
   end
 
   def promote
     @king = true
+  end
+
+  def dup(board)
+    Piece.new(board, @pos.dup, @color, @king)
   end
 
   def add_pos(*pos)
@@ -100,8 +132,6 @@ class Piece
   end
 
   def perform_slide(target_pos)
-    validate_slide(target_pos)
-
     @board[@pos] = nil
     @pos = target_pos
     @board.place_piece(self, target_pos)
@@ -109,19 +139,17 @@ class Piece
     maybe_promote
   end
 
-  def validate_slide(target_pos)
+  def slide_valid?(target_pos)
     slide_moves = move_diffs.map { |move_diff| add_pos(@pos, move_diff) }
 
-    if !slide_moves.include?(target_pos)
-      raise InvalidInputError.new("Cannot slide to target location")
-    elsif !@board[target_pos].nil?
-      raise InvalidInputError.new("Piece already exists on target position")
+    if slide_moves.include?(target_pos) && @board[target_pos].nil?
+      true
+    else
+      false
     end
   end
 
   def perform_jump(target_pos)
-    validate_jump(target_pos)
-
     @board[avg_pos(@pos, target_pos)] = nil
     @board[@pos] = nil
     @pos = target_pos
@@ -130,24 +158,72 @@ class Piece
     maybe_promote
   end
 
-  def validate_jump(target_pos)
+  def jump_valid?(target_pos)
     jump_moves = move_diffs.map do |move_diff|
       add_pos(@pos, move_diff, move_diff)
     end
 
-    if !jump_moves.include?(target_pos)
-      raise InvalidInputError.new("Cannot jump to target location")
-    elsif !@board[target_pos].nil?
-      raise InvalidInputError.new("Piece already exists on target position")
-    elsif @board[avg_pos(@pos, target_pos)].nil?
-      raise InvalidInputError.new("No piece to jump over")
-    elsif @board[avg_pos(@pos, target_pos)].color == @color
-      raise InvalidInputError.new("Cannot jump over own piece")
+    if jump_moves.include?(target_pos) && 
+      @board[target_pos].nil? &&
+      !@board[avg_pos(@pos, target_pos)].nil? &&
+      @board[avg_pos(@pos, target_pos)].color != @color
+      true
+    else
+      false
+    end
+  end
+
+  def perform_moves(move_sequence)
+    if valid_move_seq?(move_sequence)
+      perform_moves!(move_sequence)
+    else
+      raise InvalidMoveError.new("Illegal move sequence!")
     end
   end
 
   def perform_moves!(move_sequence)
+    if move_sequence.count <= 2 #slide or jump
+    start_piece = @board[move_sequence.first]
+    end_pos = move_sequence.last
 
+      if start_piece.slide_valid?(end_pos)
+        start_piece.perform_slide(end_pos)
+      elsif start_piece.jump_valid?(end_pos)
+        start_piece.perform_jump(end_pos)
+      else
+        raise InvalidMoveError.new("Illegal move!")
+      end
+    else
+      duped_sequence = move_sequence.dup
+
+      until duped_sequence.count <= 1
+        jumping_piece = @board[duped_sequence.first]
+        next_pos = duped_sequence[1]
+
+        unless jumping_piece.jump_valid?(next_pos)
+          raise InvalidMoveError.new("Illegal move sequence!")
+        end
+
+        jumping_piece.perform_jump(next_pos)
+
+        duped_sequence = duped_sequence[1..-1]
+      end
+    end
+
+  end
+
+  def valid_move_seq?(move_sequence)
+    duped_board = @board.dup
+
+    begin
+      duped_board[@pos].perform_moves!(move_sequence)
+    rescue InvalidMoveError
+      return false
+    rescue StandardError
+      raise "Error processing valid_move_seq?"
+    else
+      return true
+    end
   end
 
   def maybe_promote
@@ -188,43 +264,45 @@ class Game
   def run
     @board.place_pieces
 
-    while true
+    until @board.over?
       begin
         puts @board
         input = gets.chomp
         
-        unless input =~ /^.\s[0-7],[0-7]\s[0-7],[0-7]$/
+        unless input =~ /^([0-7],[0-7]\s)*[0-7],[0-7]$/
           raise "Invalid board position and/or format."
         end
 
-        type, start_pos, end_pos = input.split(" ")
-        start_pos = start_pos.split(",").map { |coord| Integer(coord) }
-        end_pos = end_pos.split(",").map { |coord| Integer(coord) }
+        moves = input.split(" ")
+        
+        moves.map! do |move|
+          move.split(",").map { |coord| Integer(coord) }
+        end
 
-        unless @board.has_piece?(start_pos)
-          raise InvalidInputError.new("No piece in start position")
+        unless @board.has_piece?(moves.first)
+          raise InvalidMoveError.new("No piece in start position!")
         end
         
-        if type == 's'
-          @board[start_pos].perform_slide(end_pos)
-        elsif type == 'j'    
-          @board[start_pos].perform_jump(end_pos)
-        end
+        @board[moves.first].perform_moves(moves)
 
-      rescue InvalidInputError => e
-        puts "Invalid input!"
+      rescue InvalidMoveError => e
+        print "Invalid input: "
         puts e.message
-        puts
+        retry
+      rescue InvalidInputError => e
+        puts e.message
         retry
       rescue => e
-        puts "Unknown error"
+        print "Other error: "
         puts e.message
-        puts e.backtrace
-        puts
       end
 
-      puts
+      puts "\n"
     end
+
+    puts @board
+    puts
+    puts "#{@board.winner.to_s.capitalize} wins!"
   end
 end
 
