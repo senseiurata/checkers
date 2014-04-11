@@ -79,13 +79,6 @@ class Game
   end
 end
 
-class InvalidInputError < StandardError
-
-end
-
-class InvalidMoveError < StandardError
-
-end
 
 game = Game.new
 
